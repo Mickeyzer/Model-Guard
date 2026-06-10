@@ -1,0 +1,41 @@
+version: "3.9"
+services:
+  protected_model:
+    build: ./protected_model
+    ports: ["8001:8001"]
+    environment:
+      - PORT=8001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  middleware:
+    build: ./middleware
+    ports: ["8000:8000"]
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PROTECTED_MODEL_HOST=protected_model
+      - PROTECTED_MODEL_PORT=8001
+      - DATABASE_URL=sqlite:////app/data/modelguard.db
+      - THREAT_TIER1_THRESHOLD=0.05
+      - THREAT_TIER2_THRESHOLD=0.20
+      - THREAT_TIER3_THRESHOLD=0.60
+      - THREAT_TIER4_THRESHOLD=0.85
+      - RATE_LIMIT_MAX_REQUESTS=50
+      - RATE_LIMIT_WINDOW_SECONDS=60
+    depends_on:
+      protected_model:
+        condition: service_healthy
+
+  dashboard:
+    build: ./dashboard
+    ports: ["8501:8501"]
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/modelguard.db
+    depends_on:
+      - middleware
