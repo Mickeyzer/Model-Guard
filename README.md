@@ -52,3 +52,21 @@ python demo/simulate_attack.py
 ```
 
 Watch the dashboard at `http://localhost:8501` as the simulation progresses and observe the threat tiers escalating from `ALLOW` to `BLOCK`!
+
+To attack a remote deployment instead, set `MODELGUARD_URL`, e.g. `MODELGUARD_URL=http://<server-ip>:8000/predict python demo/simulate_attack.py`.
+
+## Deploying to AWS
+
+`deploy/aws/` contains Terraform that runs the whole stack on a single EC2 instance (t3.micro, Ubuntu 24.04):
+
+- A security group exposes only the middleware (8000) and dashboard (8501). The protected model (8001) is unreachable from the internet, so clients cannot bypass the middleware. SSH is limited to the deployer's IP.
+- IMDSv2 is enforced, and a generated ED25519 key pair is used for SSH.
+- `bootstrap.sh` runs as EC2 user data on first boot: it adds swap, installs Docker, clones this repo and starts the stack with `docker compose`, with containers restarting after a reboot.
+
+```bash
+cd deploy/aws
+aws login                # or any other AWS credentials
+terraform init
+terraform apply          # prints api_url and dashboard_url
+terraform destroy        # tears everything down
+```

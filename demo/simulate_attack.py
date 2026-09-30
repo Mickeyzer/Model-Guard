@@ -10,6 +10,7 @@ Phase 2 -- Probing    : Moderate speed, boundary-adjacent feature values
 Phase 3 -- Sweep Prep : Higher speed, clearly OOD, systematic
 Phase 4 -- Full Attack: Rapid grid sweep, maximum aggression
 """
+import os
 import sys
 import time
 import random
@@ -20,7 +21,8 @@ import numpy as np
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-URL = "http://localhost:8000/predict"
+# Point at a remote deployment with e.g. MODELGUARD_URL=http://<ec2-ip>:8000/predict
+URL = os.getenv("MODELGUARD_URL", "http://localhost:8000/predict")
 
 TIER_LABELS = {0: "ALLOW", 1: "PERTURB", 2: "PERTURB", 3: "FAKE", 4: "BLOCK"}
 
