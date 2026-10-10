@@ -24,6 +24,9 @@ if hasattr(sys.stdout, 'reconfigure'):
 # Point at a remote deployment with e.g. MODELGUARD_URL=http://<ec2-ip>:8000/predict
 URL = os.getenv("MODELGUARD_URL", "http://localhost:8000/predict")
 
+# Scores and tiers are only visible when the middleware runs with
+# EXPOSE_THREAT_HEADERS=1; otherwise only allowed vs blocked can be told apart.
+
 TIER_LABELS = {0: "ALLOW", 1: "PERTURB", 2: "PERTURB", 3: "FAKE", 4: "BLOCK"}
 
 
@@ -34,20 +37,18 @@ def send_query(client, features, query_type, idx):
         threat_score_str = response.headers.get("X-Threat-Score", None)
         tier_str         = response.headers.get("X-Defense-Tier", None)
 
-        threat_score = float(threat_score_str) if threat_score_str else 0.0
-        tier         = int(tier_str)           if tier_str         else 4
+        threat_score = float(threat_score_str) if threat_score_str else None
+        tier         = int(tier_str)           if tier_str         else None
 
         action = "UNKNOWN"
         if response.status_code == 200:
-            data = response.json()
-            if data.get("model") == "modelguard-fake-v1":
-                action = "FAKE"
-            elif tier in (1, 2):
-                action = "PERTURB"
-            else:
-                action = "ALLOW"
+            # Fakes look exactly like real answers, so only the tier header
+            # tells them apart
+            action = TIER_LABELS.get(tier, "ANSWERED") if tier is not None else "ANSWERED"
         elif response.status_code == 429:
             action = "BLOCK"
+            if response.headers.get("Retry-After"):
+                action += f" (banned {response.headers['Retry-After']}s)"
 
         return {
             "index":        idx,
@@ -64,12 +65,14 @@ def send_query(client, features, query_type, idx):
 def print_row(r):
     # Icon based on actual action taken (not tier), so rate-limit blocks show [X]
     icon_map = {"ALLOW": "[ ]", "PERTURB": "[~]", "FAKE": "[?]", "BLOCK": "[X]"}
-    icon = icon_map.get(r["action"], "   ")
+    icon = icon_map.get(r["action"].split(" ")[0], "   ")
+    score = f"{r['threat_score']:>6.4f}" if r["threat_score"] is not None else "hidden"
+    tier = f"T{r['tier']}" if r["tier"] is not None else "T?"
     print(
         f"  {r['index']:<4} "
         f"{r['type']:<11} "
-        f"{r['threat_score']:>6.4f}       "
-        f"T{r['tier']}     "
+        f"{score}       "
+        f"{tier}     "
         f"{icon} {r['action']}"
     )
 
@@ -94,6 +97,7 @@ def main():
     print(f"\n{'='*62}")
     print(f"  ModelGuard -- Live Attack Simulation (LinkedIn Demo)")
     print(f"  Target: {URL}")
+    print(f"  (start the stack with EXPOSE_THREAT_HEADERS=1 to see scores and tiers)")
     print(f"{'='*62}\n")
 
     all_results = []
@@ -200,8 +204,13 @@ def main():
         by_type.setdefault(r["type"], []).append(r)
 
     for qtype, results in by_type.items():
-        avg  = sum(r["threat_score"] for r in results) / len(results)
-        maxt = max(r["tier"] for r in results)
+        scored = [r for r in results if r["tier"] is not None]
+        blocked = sum(1 for r in results if r["action"].startswith("BLOCK"))
+        if not scored:
+            print(f"  {qtype:<12} -> {blocked}/{len(results)} blocked  (scores hidden)")
+            continue
+        avg  = sum(r["threat_score"] for r in scored) / len(scored)
+        maxt = max(r["tier"] for r in scored)
         action = TIER_LABELS.get(maxt, "?")
         print(f"  {qtype:<12} -> Avg Threat: {avg:.4f}  |  Max Tier: T{maxt} ({action})")
 

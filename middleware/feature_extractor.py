@@ -22,10 +22,10 @@ def extract_behavioral_features(recent_queries: list) -> dict:
     if n < 2:
         mean_inter_query_time_ms = 0.0
     else:
-        # Ignore the first query if inter_query_time_ms is 0.0, or just sum all.
-        # The architecture says "mean of inter_query_time_ms values".
-        total = sum(q.inter_query_time_ms for q in recent_queries)
-        mean_inter_query_time_ms = float(total) / n
+        # The first query's gap points at a query outside the window (or is
+        # 0.0 for a new client), so only the n-1 gaps inside the window count.
+        gaps = [q.inter_query_time_ms or 0.0 for q in recent_queries[1:]]
+        mean_inter_query_time_ms = float(sum(gaps)) / len(gaps)
         
     # Helper for extracting feature matrix
     # Assuming q.features is a list of 4 floats
@@ -52,13 +52,17 @@ def extract_behavioral_features(recent_queries: list) -> dict:
             for count in bins:
                 p = count / n_valid_X
                 if p > 0:
-                    dim_entropy -= p * math.log2(p + 1e-9)
+                    dim_entropy -= p * math.log2(p)
             entropies.append(dim_entropy)
         feature_space_entropy = sum(entropies) / 4.0
 
+    # Features 4 and 5 use the protected model's real outputs, not what was
+    # returned. Returned outputs may be perturbed or fake, and scoring those
+    # would let ModelGuard's own noise push a client into higher tiers.
+
     # 4. prediction_entropy
     prediction_entropy = 0.0
-    preds = [q.returned_prediction for q in recent_queries if q.returned_prediction is not None]
+    preds = [q.raw_prediction for q in recent_queries if q.raw_prediction is not None]
     if preds:
         counts = {0: 0, 1: 0, 2: 0}
         for p in preds:
@@ -71,11 +75,11 @@ def extract_behavioral_features(recent_queries: list) -> dict:
         for count in counts.values():
             p = count / n_preds
             if p > 0:
-                prediction_entropy -= p * math.log2(p + 1e-9)
+                prediction_entropy -= p * math.log2(p)
 
     # 5. boundary_proximity_score
     boundary_proximity_score = 0.0
-    probs = [q.returned_probabilities for q in recent_queries if q.returned_probabilities]
+    probs = [q.raw_probabilities for q in recent_queries if q.raw_probabilities]
     if probs:
         boundary_count = sum(1 for p in probs if max(p) < 0.70)
         boundary_proximity_score = float(boundary_count) / len(probs)

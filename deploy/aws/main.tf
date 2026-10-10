@@ -104,4 +104,11 @@ resource "aws_instance" "modelguard" {
   }
 
   tags = { Name = "modelguard" }
+
+  # The AMI parameter tracks Canonical's latest image, and user data only runs
+  # on first boot. Without this, a new Ubuntu release (or a bootstrap edit)
+  # would make the next apply replace the instance, wiping its logs and IP.
+  lifecycle {
+    ignore_changes = [ami, user_data]
+  }
 }

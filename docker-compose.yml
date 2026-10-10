@@ -1,8 +1,9 @@
-version: "3.9"
 services:
   protected_model:
     build: ./protected_model
-    ports: ["8001:8001"]
+    # Internal only: reachable by the middleware over the compose network,
+    # never published on the host, so clients cannot bypass ModelGuard
+    expose: ["8001"]
     environment:
       - PORT=8001
     healthcheck:
@@ -26,6 +27,10 @@ services:
       - THREAT_TIER4_THRESHOLD=0.85
       - RATE_LIMIT_MAX_REQUESTS=50
       - RATE_LIMIT_WINDOW_SECONDS=60
+      # Escalating IP bans after a tier-4 score: 5 min, 1 h, 24 h
+      - BAN_DURATIONS_SECONDS=300,3600,86400
+      # Set to 1 to send X-Threat-Score / X-Defense-Tier (demo only)
+      - EXPOSE_THREAT_HEADERS=${EXPOSE_THREAT_HEADERS:-0}
     depends_on:
       protected_model:
         condition: service_healthy

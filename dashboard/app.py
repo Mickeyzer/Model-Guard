@@ -44,29 +44,31 @@ now = datetime.now(timezone.utc)
 twenty_four_hours_ago = now - timedelta(hours=24)
 thirty_mins_ago = now - timedelta(minutes=30)
 
-# SQLite stores naive UTC strings — strip tzinfo for comparisons
-now_naive = now.replace(tzinfo=None)
-ts_24h = (now - timedelta(hours=24)).replace(tzinfo=None)
-ts_30m = (now - timedelta(minutes=30)).replace(tzinfo=None)
+# SQLite stores timestamps as naive UTC text like "2026-10-05 13:00:00.123456".
+# Comparisons are string comparisons, so the cutoff must use the same format:
+# isoformat()'s "T" separator sorts after the space and would drop most rows.
+SQLITE_TS_FORMAT = "%Y-%m-%d %H:%M:%S"
+ts_24h = (now - timedelta(hours=24)).strftime(SQLITE_TS_FORMAT)
 
 with engine.connect() as conn:
     # 1. Top Metrics (Last 24h)
     q_total = "SELECT COUNT(*) FROM query_log WHERE timestamp >= :ts"
     q_ips = "SELECT COUNT(DISTINCT client_ip) FROM query_log WHERE timestamp >= :ts"
-    q_attacks = "SELECT COUNT(*) FROM defense_log WHERE timestamp >= :ts AND tier_applied > 0"
+    # Tier 3+ (fake or block); tiers 1-2 are precautionary noise, not attacks
+    q_attacks = "SELECT COUNT(*) FROM defense_log WHERE timestamp >= :ts AND tier_applied >= 3"
     q_blocks = "SELECT COUNT(DISTINCT client_ip) FROM defense_log WHERE timestamp >= :ts AND action_taken = 'BLOCK'"
     
-    total_queries = conn.execute(text(q_total), {"ts": ts_24h.isoformat()}).scalar() or 0
-    active_ips = conn.execute(text(q_ips), {"ts": ts_24h.isoformat()}).scalar() or 0
-    attacks_detected = conn.execute(text(q_attacks), {"ts": ts_24h.isoformat()}).scalar() or 0
-    ips_blocked = conn.execute(text(q_blocks), {"ts": ts_24h.isoformat()}).scalar() or 0
+    total_queries = conn.execute(text(q_total), {"ts": ts_24h}).scalar() or 0
+    active_ips = conn.execute(text(q_ips), {"ts": ts_24h}).scalar() or 0
+    attacks_detected = conn.execute(text(q_attacks), {"ts": ts_24h}).scalar() or 0
+    ips_blocked = conn.execute(text(q_blocks), {"ts": ts_24h}).scalar() or 0
 
 
 
     # 3. Tier Distribution & Threat Score Histogram (Last 24h)
     # Fetch all tiers and threat scores for the histograms
     q_dist = "SELECT threat_score, tier_applied FROM defense_log WHERE timestamp >= :ts"
-    df_dist = pd.read_sql(text(q_dist), conn, params={"ts": ts_24h.isoformat()})
+    df_dist = pd.read_sql(text(q_dist), conn, params={"ts": ts_24h})
     
     # 4. Recent Defense Events
     q_recent = """
@@ -151,7 +153,7 @@ if not df_recent.empty:
     # Styling function
     def highlight_rows(row):
         action = row["Action"]
-        if action == "BLOCK":
+        if action in ("BLOCK", "RATE_LIMIT"):
             return ['background-color: rgba(231, 76, 60, 0.2)'] * len(row)
         elif action == "FAKE":
             return ['background-color: rgba(243, 156, 18, 0.2)'] * len(row)
