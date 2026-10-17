@@ -162,8 +162,12 @@ def render(window: str):
         ts["top"] = ts.groupby("t")["requests"].cumsum()
         ts["base"] = ts["top"] - ts["requests"]
         ts["t_end"] = ts["t"] + pd.Timedelta(bucket) * 0.85
+        # Fixed to the whole window, so a short burst shows as a spike in
+        # context instead of one bucket stretched across the chart
+        x_domain = [(now - span).replace(tzinfo=None).isoformat(), now.replace(tzinfo=None).isoformat()]
         chart = alt.Chart(ts).mark_bar().encode(
-            x=alt.X("t:T", title=None, axis=alt.Axis(format="%H:%M", grid=False, labelColor="#8a94a3", domainColor="#262d36", tickColor="#262d36")),
+            x=alt.X("t:T", title=None, scale=alt.Scale(domain=x_domain),
+                    axis=alt.Axis(format="%H:%M", grid=False, labelColor="#8a94a3", domainColor="#262d36", tickColor="#262d36")),
             x2="t_end:T",
             y=alt.Y("top:Q", title=None, axis=alt.Axis(gridColor="#1c222a", labelColor="#8a94a3", domain=False, ticks=False, tickMinStep=1)),
             y2="base:Q",
