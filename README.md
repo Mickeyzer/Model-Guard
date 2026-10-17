@@ -18,7 +18,7 @@ ModelGuard is middleware that sits in front of an ML model API and defends it ag
 
 The detector is trained and evaluated on **simulated** traffic, not real users (`data/traffic_sim.py`). Each simulated session is a sequence of queries with timestamps; every query goes through the real protected model and the middleware's own feature extractor, on the same window the middleware sees. There are 5 normal-client families (casual use, steady app integration, batch scoring, "what-if" tweaking, polling) and 6 attack families (fast and slow grid sweeps, boundary bisection, uniform random queries, high-volume noisy surrogate data, slow random queries inside the real data range).
 
-Evaluation uses fresh sessions from a different seed plus two families never seen in training (a busier 25-40 req/min app and a Latin-hypercube sweep), with the deployed thresholds and escalation rule: 40 sessions per family, about 50,000 scored queries. From `data/fingerprint_metrics.json`:
+Evaluation uses fresh sessions from a different seed plus two families never seen in training (a busier 25-40 req/min app and a Latin-hypercube sweep), with the deployed thresholds and escalation rule: 40 sessions per family, about 50,000 scored queries per run. Attack results were identical on two independent evaluation runs (seeds 2 and 3); normal-traffic figures are given as the range across both. `data/fingerprint_metrics.json` holds the seed-2 run.
 
 | Attack family | Sessions banned | Median queries to ban |
 |---|---|---|
@@ -31,11 +31,12 @@ Evaluation uses fresh sessions from a different seed plus two families never see
 
 | Normal family | Answers noised | Sessions ever banned |
 |---|---|---|
-| Casual, batch, what-if, polling | 0-3% | 0% |
-| Steady app, 3-25 req/min | 5% | 5% |
-| Busy app, 25-40 req/min (held out) | 29% | 5% |
+| Casual, polling | 0-3% | 0% |
+| Batch scoring, what-if tweaking | 1-8% | 0-2.5% |
+| Steady app, 3-25 req/min | 4-5% | 0-5% |
+| Busy app, 25-40 req/min (held out) | 26-29% | 5-7.5% |
 
-Limits: these are simulated behaviours, so real traffic will differ. Busy legitimate integrations are the weak spot (about 1 in 20 sessions still hit a first, 5-minute ban, and heavy apps see noised answers on almost a third of requests). A client slower than about one query a minute leaves too little history in the 5-minute window to be scored.
+Limits: these are simulated behaviours, so real traffic will differ. Busy legitimate integrations are the weak spot (5-7.5% of busy-app sessions still hit a first, 5-minute ban, and they see noised answers on over a quarter of requests). A client slower than about one query a minute leaves too little history in the 5-minute window to be scored.
 
 To regenerate: `python data/generate_training_data.py` then `python data/train_fingerprint_model.py`.
 
