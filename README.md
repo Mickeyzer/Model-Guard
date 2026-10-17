@@ -18,14 +18,14 @@ ModelGuard is middleware that sits in front of an ML model API and defends it ag
 
 The detector is trained and evaluated on **simulated** traffic, not real users (`data/traffic_sim.py`). Each simulated session is a sequence of queries with timestamps; every query goes through the real protected model and the middleware's own feature extractor, on the same window the middleware sees. There are 5 normal-client families (casual use, steady app integration, batch scoring, "what-if" tweaking, polling) and 6 attack families (fast and slow grid sweeps, boundary bisection, uniform random queries, high-volume noisy surrogate data, slow random queries inside the real data range).
 
-Evaluation uses fresh sessions from a different seed plus two families never seen in training (a busier 25-40 req/min app and a Latin-hypercube sweep), with the deployed thresholds and escalation rule: 40 sessions per family, about 50,000 scored queries per run. Attack results were identical on two independent evaluation runs (seeds 2 and 3); normal-traffic figures are given as the range across both. `data/fingerprint_metrics.json` holds the seed-2 run.
+Evaluation uses fresh sessions from a different seed plus two families never seen in training (a busier 25-40 req/min app and a Latin-hypercube sweep), with the deployed thresholds and escalation rule: 40 sessions per family, about 50,000 scored queries per run. On two independent evaluation runs (seeds 2 and 3) every attack session was banned both times; medians and normal-traffic figures are given as the range across both. `data/fingerprint_metrics.json` holds the seed-2 run.
 
 | Attack family | Sessions banned | Median queries to ban |
 |---|---|---|
 | Grid sweep, fast / slow (2-20 req/min) | 100% / 100% | 8 / 8 |
 | Boundary bisection | 100% | 8 |
 | Uniform random | 100% | 8 |
-| High-volume noisy surrogate | 100% | 9 |
+| High-volume noisy surrogate | 100% | 8-9 |
 | Slow random inside data range | 100% | 8 |
 | Latin-hypercube sweep (held out) | 100% | 8 |
 
