@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code (Note: the data directory will be mounted via docker-compose)
 COPY . ./dashboard
+# Streamlit reads its theme from .streamlit/ in the working directory
+COPY .streamlit ./.streamlit
 
 EXPOSE 8501
 

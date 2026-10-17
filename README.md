@@ -11,7 +11,7 @@ ModelGuard is a dynamic Machine Learning defense middleware designed to protect 
   - `T3 FAKE`: Returns synthetic predictions in exactly the real model's format, so the attacker cannot tell they are fake.
   - `T4 BLOCK`: Bans the client IP with escalating durations (5 min, then 1 h, then 24 h). The ban holds even if the score drops, and blocked requests stay in the behavioural window.
 - **No signals for attackers:** Threat scores and tiers are not sent to clients unless `EXPOSE_THREAT_HEADERS=1`. Behavioural features are computed from the real model's outputs, so ModelGuard's own noise and fakes never inflate a client's score.
-- **Real-Time Dashboard:** A sleek, live Streamlit dashboard providing immediate insights into traffic volume, threat distribution, and recent defense actions.
+- **Live dashboard:** A Streamlit view of what each client actually received over time (real, noised, fake or refused), a per-client table with peak threat score and ban status, and the raw event log. Client IPs are masked to /24.
 
 ## Architecture
 
