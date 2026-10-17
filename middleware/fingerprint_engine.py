@@ -2,6 +2,8 @@ import os
 import joblib
 import numpy as np
 import logging
+from middleware.db import utcnow
+from middleware.defense import MIN_SCORING_WINDOW
 from middleware.feature_extractor import extract_behavioral_features
 
 logging.basicConfig(level=logging.INFO)
@@ -66,7 +68,9 @@ def classify_query(recent_queries: list) -> dict:
         return {"threat_score": 0.0, "features_used": {}, "model_loaded": False}
 
     # 2. Compute features using the shared extractor
-    features_dict = extract_behavioral_features(recent_queries)
+    features_dict = extract_behavioral_features(recent_queries, now=utcnow())
+    if len(recent_queries) < MIN_SCORING_WINDOW:
+        return {"threat_score": 0.0, "features_used": features_dict, "model_loaded": True}
 
     # 3. Build numpy array in strict FEATURE_ORDER
     try:

@@ -1,9 +1,11 @@
-fastapi
-uvicorn
-scikit-learn
-xgboost
-pandas
-numpy
-sqlalchemy
-httpx
-python-dotenv
+# Pinned to the versions data/fingerprint_model.pkl was trained and tested
+# with; a different xgboost or scikit-learn may not load the pickle
+fastapi==0.135.2
+uvicorn==0.42.0
+scikit-learn==1.8.0
+xgboost==3.1.2
+pandas==2.3.3
+numpy==2.3.5
+sqlalchemy==2.0.50
+httpx==0.28.1
+python-dotenv==1.2.2

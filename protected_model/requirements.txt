@@ -1,5 +1,6 @@
-fastapi
-uvicorn
-scikit-learn
-joblib
-numpy
+# Pinned so model.pkl always loads with the scikit-learn it was tested with
+fastapi==0.135.2
+uvicorn==0.42.0
+scikit-learn==1.8.0
+joblib==1.4.2
+numpy==2.3.5

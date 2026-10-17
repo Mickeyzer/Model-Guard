@@ -1,6 +1,13 @@
 import math
+from datetime import timedelta
 
-def extract_behavioral_features(recent_queries: list) -> dict:
+def extract_behavioral_features(recent_queries: list, now=None) -> dict:
+    """
+    recent_queries is the client's history window, oldest first (up to five
+    minutes). query_count_1min counts only the last 60 s before `now`; every
+    other feature uses the whole window. Without `now` (or timestamps) the
+    whole window is counted.
+    """
     # 0. Handle empty list
     if not recent_queries:
         return {
@@ -16,7 +23,12 @@ def extract_behavioral_features(recent_queries: list) -> dict:
     n = len(recent_queries)
     
     # 1. query_count_1min
-    query_count_1min = float(n)
+    stamps = [getattr(q, "timestamp", None) for q in recent_queries]
+    if now is not None and all(stamps):
+        cutoff = now - timedelta(seconds=60)
+        query_count_1min = float(sum(1 for t in stamps if t >= cutoff))
+    else:
+        query_count_1min = float(n)
     
     # 2. mean_inter_query_time_ms
     if n < 2:

@@ -53,3 +53,19 @@ def test_tier2_rate_limits_after_max_requests():
                for _ in range(defense.RATE_LIMIT_MAX_REQUESTS + 1)]
     assert actions[:-1] == ["PERTURB"] * defense.RATE_LIMIT_MAX_REQUESTS
     assert actions[-1] == "RATE_LIMIT"
+
+
+def test_escalate_lets_noise_through_at_once():
+    assert defense.escalate(1, []) == 1
+    assert defense.escalate(2, []) == 2
+
+
+def test_escalate_holds_harsh_tiers_until_streak():
+    high = 0.95  # tier 4 at default thresholds
+    assert defense.escalate(4, []) == 2
+    assert defense.escalate(4, [high]) == 2
+    assert defense.escalate(4, [high, high]) == 4
+    # One quiet score in the streak keeps it at tier 2
+    assert defense.escalate(4, [high, 0.0]) == 2
+    # A tier-3 score in the streak caps the result at 3
+    assert defense.escalate(4, [0.8, high]) == 3

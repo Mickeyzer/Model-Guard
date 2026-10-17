@@ -59,32 +59,34 @@ def test_health_does_not_leak_internal_url(client):
 
 
 def test_fake_tier_looks_real_and_logs_real_output(client, fixed_score, protected_model, db):
-    fixed_score(0.8)  # tier 3
-    response = predict(client)
-    assert response.status_code == 200
-    body = response.json()
+    fixed_score(0.8)  # tier 3, applied once the streak is reached
+    responses = [predict(client) for _ in range(3)]
+    assert all(r.status_code == 200 for r in responses)
+    body = responses[-1].json()
     assert body["model"] == "iris-random-forest-v1"
     assert body["prediction"] == body["probabilities"].index(max(body["probabilities"]))
     # The real model is still queried so features use true outputs
-    assert len(protected_model) == 1
-    row = db.query(QueryLog).one()
-    assert row.raw_prediction == 0
-    assert row.raw_probabilities is not None
-    assert row.tier_applied == 3
+    assert len(protected_model) == 3
+    rows = db.query(QueryLog).order_by(QueryLog.id).all()
+    assert [r.tier_applied for r in rows] == [2, 2, 3]
+    assert rows[-1].raw_prediction == 0
+    assert rows[-1].raw_probabilities is not None
 
 
 def test_tier4_bans_and_ban_outlasts_the_score(client, fixed_score, protected_model, db):
     fixed_score(0.95)
+    # The first two high scores are held at tier 2; the third bans
+    assert [predict(client).status_code for _ in range(2)] == [200, 200]
     first = predict(client)
     assert first.status_code == 429
     assert 295 <= int(first.headers["Retry-After"]) <= 300
-    assert protected_model == []  # blocked requests never reach the model
+    assert len(protected_model) == 2  # blocked requests never reach the model
 
     # Score drops, but the ban holds
     fixed_score(0.0)
     second = predict(client)
     assert second.status_code == 429
-    assert protected_model == []
+    assert len(protected_model) == 2
 
     # Blocked requests are logged, so the window keeps seeing the attack
     assert db.query(QueryLog).filter(QueryLog.tier_applied == 4).count() == 2
@@ -115,3 +117,10 @@ def test_rapid_grid_sweep_gets_blocked(client):
         for b in range(4):
             statuses.append(predict(client, [0.5 + 0.7 * a, 0.5 + 1.5 * b, 2.0, 1.0]).status_code)
     assert 429 in statuses
+
+
+def test_new_client_is_not_scored_before_min_window(client, protected_model, db):
+    # Sweep-like inputs, but too little history to judge: plain answers
+    for a in range(4):
+        assert predict(client, [0.5 + 2.0 * a, 7.0, 0.5, 6.0]).status_code == 200
+    assert {r.threat_score for r in db.query(QueryLog)} == {0.0}

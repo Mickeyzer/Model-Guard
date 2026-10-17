@@ -171,12 +171,17 @@ def register_ban(db: Session, client_ip: str) -> Ban:
     db.commit()
     return ban
 
-def get_recent_queries(db: Session, client_ip: str, window_seconds: int = 60) -> list[QueryLog]:
+def get_recent_queries(db: Session, client_ip: str, window_seconds: int = 300,
+                       limit: int = 100) -> list[QueryLog]:
+    # The newest `limit` queries in the window, oldest first. Five minutes lets
+    # a slow sweep (a few queries a minute) build up enough history to score;
+    # the cap keeps the O(n^2) repetition check cheap for fast clients.
     cutoff = utcnow() - timedelta(seconds=window_seconds)
-    return db.query(QueryLog).filter(
+    rows = db.query(QueryLog).filter(
         QueryLog.client_ip == client_ip,
         QueryLog.timestamp >= cutoff
-    ).order_by(QueryLog.timestamp.asc()).all()
+    ).order_by(QueryLog.timestamp.desc()).limit(limit).all()
+    return rows[::-1]
 
 def get_last_query_timestamp(db: Session, client_ip: str) -> datetime | None:
     result = db.query(QueryLog.timestamp).filter(

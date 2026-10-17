@@ -1,17 +1,43 @@
 # ModelGuard
 
-ModelGuard is a dynamic Machine Learning defense middleware designed to protect your ML models from extraction attacks, data poisoning, and API abuse. Instead of relying on static rate limits, ModelGuard actively fingerprints user behavior and employs a tiered defense strategy.
+ModelGuard is middleware that sits in front of an ML model API and defends it against model-extraction attacks (clients querying the API to copy its decision boundaries). Instead of a static rate limit, it scores each client's recent query behaviour and escalates through tiered responses.
 
 ## Features
 
-- **Behavioral Fingerprinting:** Uses an XGBoost classifier to monitor incoming request patterns (entropy, variance, query velocity, and boundary proximity) to identify out-of-distribution attacks like grid-sweeps.
+- **Behavioural fingerprinting:** An XGBoost classifier scores each request from 7 features of the client's last 5 minutes of queries (up to 100): request rate, timing, input-space entropy and variance, prediction entropy, boundary proximity and repetition. A client is not scored until it has 5 queries of history.
 - **Dynamic Tiered Defense:**
   - `T0 ALLOW`: Normal traffic passes through seamlessly.
   - `T1 / T2 PERTURB`: Injects dynamic noise into probabilities to corrupt an attacker's dataset (tier 2 also rate-limits).
   - `T3 FAKE`: Returns synthetic predictions in exactly the real model's format, so the attacker cannot tell they are fake.
+  - Tiers 1-2 apply immediately; tiers 3-4 need 3 consecutive high scores, so one odd request never earns a real user fake answers or a ban.
   - `T4 BLOCK`: Bans the client IP with escalating durations (5 min, then 1 h, then 24 h). The ban holds even if the score drops, and blocked requests stay in the behavioural window.
 - **No signals for attackers:** Threat scores and tiers are not sent to clients unless `EXPOSE_THREAT_HEADERS=1`. Behavioural features are computed from the real model's outputs, so ModelGuard's own noise and fakes never inflate a client's score.
 - **Live dashboard:** A Streamlit view of what each client actually received over time (real, noised, fake or refused), a per-client table with peak threat score and ban status, and the raw event log. Client IPs are masked to /24.
+
+## Evaluation
+
+The detector is trained and evaluated on **simulated** traffic, not real users (`data/traffic_sim.py`). Each simulated session is a sequence of queries with timestamps; every query goes through the real protected model and the middleware's own feature extractor, on the same window the middleware sees. There are 5 normal-client families (casual use, steady app integration, batch scoring, "what-if" tweaking, polling) and 6 attack families (fast and slow grid sweeps, boundary bisection, uniform random queries, high-volume noisy surrogate data, slow random queries inside the real data range).
+
+Evaluation uses fresh sessions from a different seed plus two families never seen in training (a busier 25-40 req/min app and a Latin-hypercube sweep), with the deployed thresholds and escalation rule: 40 sessions per family, about 50,000 scored queries. From `data/fingerprint_metrics.json`:
+
+| Attack family | Sessions banned | Median queries to ban |
+|---|---|---|
+| Grid sweep, fast / slow (2-20 req/min) | 100% / 100% | 8 / 8 |
+| Boundary bisection | 100% | 8 |
+| Uniform random | 100% | 8 |
+| High-volume noisy surrogate | 100% | 9 |
+| Slow random inside data range | 100% | 8 |
+| Latin-hypercube sweep (held out) | 100% | 8 |
+
+| Normal family | Answers noised | Sessions ever banned |
+|---|---|---|
+| Casual, batch, what-if, polling | 0-3% | 0% |
+| Steady app, 3-25 req/min | 5% | 5% |
+| Busy app, 25-40 req/min (held out) | 29% | 5% |
+
+Limits: these are simulated behaviours, so real traffic will differ. Busy legitimate integrations are the weak spot (about 1 in 20 sessions still hit a first, 5-minute ban, and heavy apps see noised answers on almost a third of requests). A client slower than about one query a minute leaves too little history in the 5-minute window to be scored.
+
+To regenerate: `python data/generate_training_data.py` then `python data/train_fingerprint_model.py`.
 
 ## Architecture
 

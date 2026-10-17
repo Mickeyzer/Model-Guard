@@ -86,14 +86,14 @@ def predict(request: Request, body: PredictRequest, db: Session = Depends(get_db
         inter_query_time_ms = (utcnow() - last_ts).total_seconds() * 1000 if last_ts else 0.0
 
         # Step 3
-        recent_queries = get_recent_queries(db, client_ip, window_seconds=60)
+        recent_queries = get_recent_queries(db, client_ip)
 
         # Step 4
         fingerprint_result = fingerprint_engine.classify_query(recent_queries)
         threat_score = fingerprint_result["threat_score"]
 
         # Step 5
-        tier = defense.get_tier(threat_score)
+        tier = defense.escalate(defense.get_tier(threat_score), [q.threat_score for q in recent_queries])
 
         # Step 6: an active ban blocks whatever the current score is. Reaching
         # tier 4 while not banned adds a strike and starts a longer ban.

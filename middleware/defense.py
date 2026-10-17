@@ -12,6 +12,13 @@ T2 = float(os.getenv("THREAT_TIER2_THRESHOLD", 0.50))
 T3 = float(os.getenv("THREAT_TIER3_THRESHOLD", 0.70))
 T4 = float(os.getenv("THREAT_TIER4_THRESHOLD", 0.90))
 
+# A client is not scored until it has this many queries of history: with
+# fewer, one or two real flowers near a class boundary swing the features.
+MIN_SCORING_WINDOW = int(os.getenv("MIN_SCORING_WINDOW", 5))
+# Fake answers and bans need this many consecutive tier-3+ scores. Noise
+# (tiers 1-2) is cheap for a real user, so it still applies at once.
+HARSH_TIER_STREAK = int(os.getenv("HARSH_TIER_STREAK", 3))
+
 # The protected model is a 100-tree random forest, so its probabilities are
 # always multiples of 0.01. Altered responses are rounded the same way;
 # otherwise their extra decimals would tell an attacker they were altered.
@@ -48,6 +55,20 @@ def get_tier(threat_score: float) -> int:
         return 3
     else:
         return 4
+
+def escalate(tier: int, previous_scores: list) -> int:
+    """
+    Applies the streak rule to a raw tier. previous_scores are this client's
+    earlier raw threat scores, oldest first. Tier 3+ holds at tier 2 until the
+    last HARSH_TIER_STREAK scores (this one included) all reach tier 3, and
+    then goes no higher than the lowest of them.
+    """
+    if tier < 3 or HARSH_TIER_STREAK <= 1:
+        return tier
+    earlier = [get_tier(s or 0.0) for s in previous_scores[-(HARSH_TIER_STREAK - 1):]]
+    if len(earlier) < HARSH_TIER_STREAK - 1:
+        return 2
+    return max(2, min([tier] + earlier))
 
 def _round_probs(probs: list[float]) -> list[float]:
     """Round to PROB_DECIMALS and push any rounding drift onto the largest

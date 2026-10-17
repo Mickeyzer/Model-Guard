@@ -1,4 +1,6 @@
 # ModelGuard — Complete Architecture Specification
+
+> **Note (2026-10):** this is the original build spec. The implementation has since moved on: the behavioural window is 5 minutes / 100 queries (not 60 s), training data comes from simulated sessions replayed through the real feature extractor (`data/traffic_sim.py`), and tiers 3-4 need 3 consecutive high scores. See README.md for current behaviour and evaluation.
 > Give this entire document to the agent at the start of every session as persistent context.
 > Every file, function, schema, and data contract is defined here. The agent must not deviate from these interfaces — only the internal implementation details are flexible.
 

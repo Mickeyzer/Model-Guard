@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from middleware.feature_extractor import extract_behavioral_features
@@ -39,3 +40,16 @@ def test_blocked_rows_without_model_output_are_skipped():
     feats = extract_behavioral_features(rows)
     assert feats["query_count_1min"] == 5.0
     assert feats["boundary_proximity_score"] == 1.0
+
+
+def test_query_count_uses_last_minute_of_a_longer_window():
+    now = datetime(2026, 1, 1, 12, 0, 0)
+    rows = []
+    for secs_ago in (240, 180, 90, 50, 10):
+        r = row([5.0, 3.0, 1.5, 0.2], 1000, 0, [1.0, 0.0, 0.0])
+        r.timestamp = now - timedelta(seconds=secs_ago)
+        rows.append(r)
+    feats = extract_behavioral_features(rows, now=now)
+    assert feats["query_count_1min"] == 2.0
+    # Without a reference time the whole window counts
+    assert extract_behavioral_features(rows)["query_count_1min"] == 5.0
